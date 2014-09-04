@@ -1,0 +1,15 @@
+# Generic files
+*~
+*.lock
+*.DS_Store
+*.swp
+*.out
+
+# IDE files
+nbproject/
+.idea/
+*.tmproj
+
+# Project
+debug.txt
+test.php
