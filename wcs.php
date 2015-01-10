@@ -3,7 +3,7 @@
 /**
  * Plugin Name: Wordpress Cloud Storage
  * Description: Simple plugin for wordpress to upload/delete media from Amazon S3.
- * Version: 0.1
+ * Version: 0.2
  * Author: Mikael Keto
  * Author URI: http://ketos.se
  * License: GPLv2
@@ -46,26 +46,23 @@ class wordpress_cloud_storage_plugin
 		$options['secret'] = $this->cfg['secret'];
 		if($this->s3 = S3Client::factory($options))
 		{
+			add_filter('wp_delete_file', array($this, 'delete_attachment'), 20);
 			add_filter('wp_generate_attachment_metadata', array($this, 'upload_attachment'), 20, 2);
-			add_filter('delete_attachment', array($this, 'delete_attachment'), 20);
+			add_filter('wp_update_attachment_metadata', array($this, 'upload_attachment'), 10, 5);
 		}
 	}
 
 	/**
 	 *  Delete attachment
 	 */
-	public function delete_attachment($post_id)
+	public function delete_attachment($file)
 	{
-		if(!$directory = $this->get_directory($post_id)) return;
+		if(!$file) return $file;
+		$tmp = ltrim(trailingslashit($this->cfg['prefix']), '/');
+		$tmp .= ltrim(str_replace($this->get_upload_path(), '', $file), '/');
 
 		$objects = array();
-		$objects[] = array('Key' => $directory.basename(get_attached_file($post_id, true)));
-		foreach(get_intermediate_image_sizes() as $size)
-		{
-			$intermediate = image_get_intermediate_size($post_id, $size);
-			if(!isset($intermediate['file']) || !$intermediate['file']) continue;
-			$objects[] = array('Key' => $directory.$intermediate['file']);
-		}
+		$objects[] = array('Key' => $tmp);
 
 		try {
 			$this->s3->deleteObjects
@@ -80,8 +77,8 @@ class wordpress_cloud_storage_plugin
 		catch(Exception $e)
 		{
 			error_log('Error removing files from S3: '.$e->getMessage());
-			return;
 		}
+		return $file;
 	}
 
 	/**
@@ -110,7 +107,7 @@ class wordpress_cloud_storage_plugin
 
 		$out = ltrim(trailingslashit($this->cfg['prefix']), '/');
 		$out .= ltrim(trailingslashit(
-				str_replace($this->get_upload_path(), '', $uploads['path'])), '/');
+			str_replace($this->get_upload_path(), '', $uploads['path'])), '/');
 		return $out;
 	}
 
