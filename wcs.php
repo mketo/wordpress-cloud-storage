@@ -358,7 +358,7 @@ class wordpress_cloud_storage_plugin
 		if(preg_match_all('#(?:<a[^>]+?href=["|\'](?P<link_url>[^\s]+?)["|\'][^>]*?>\s*)?(?P<img_tag>'.
 		'<img[^>]+?src=["|\'](?P<img_url>[^\s]+?)["|\'].*?>){1}(?:\s*</a>)?#is', $data, $images))
 		{
-			foreach($images as $key => $value)
+			foreach($images[0] as $key => $value)
 			{
 				if(!isset($images['img_url'][$key]) || !$images['img_url'][$key]) continue;
 				if(stripos($images['img_url'][$key], 'wp-content/uploads') === false) continue;
@@ -370,7 +370,7 @@ class wordpress_cloud_storage_plugin
 				$data = str_replace($value, $new_value, $data);
 			}
 		}
-    return $data;
+		return $data;
 	}
 }
 
