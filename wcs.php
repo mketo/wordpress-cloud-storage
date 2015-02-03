@@ -4,7 +4,7 @@
  * Plugin Name: Wordpress Cloud Storage
  * Description: Simple plugin for wordpress to upload/delete
  * media from Amazon S3 or Google Cloud Storage.
- * Version: 0.3
+ * Version: 0.4
  * Author: Mikael Keto
  * Author URI: http://ketos.se
  * License: GPLv2
@@ -40,10 +40,12 @@ class wordpress_cloud_storage_plugin
 	public function __construct()
 	{
 		if(!defined('WCS_SERVICE')) return;
-		foreach(array('bucket', 'id', 'email', 'name', 'prefix', 'region', 'secret', 'service') as $key)
+		foreach(array('bucket', 'id', 'email', 'name', 'prefix', 'region',
+		'secret', 'service', 'url_rewrite') as $key)
 		{
 			$this->cfg[$key] = defined('WCS_'.strtoupper($key)) ? constant('WCS_'.strtoupper($key)) : '';
 		}
+		add_action('plugins_loaded', array($this, 'url_rewrite'));
 		add_filter('wp_delete_file', array($this, 'delete_attachment'), 20);
 		add_filter('wp_generate_attachment_metadata', array($this, 'upload_attachment'), 20, 2);
 		add_filter('wp_update_attachment_metadata', array($this, 'upload_attachment'), 10, 5);
@@ -329,6 +331,46 @@ class wordpress_cloud_storage_plugin
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Rewrite url
+	 *
+	 * @return bool False or true
+	 */
+	public function url_rewrite()
+	{
+		if(!isset($this->cfg['url_rewrite']) || !$this->cfg['url_rewrite']) return false;
+		ob_start(array($this, 'url_rewrite_buffer_callback'));
+		return true;
+	}
+
+	/**
+	 * Rewrite url buffer callback
+	 *
+	 * @param string $data Buffer data
+	 *
+	 * @return bool False or true
+	 */
+	public function url_rewrite_buffer_callback($data)
+	{
+		$images = array();
+		if(preg_match_all('#(?:<a[^>]+?href=["|\'](?P<link_url>[^\s]+?)["|\'][^>]*?>\s*)?(?P<img_tag>'.
+		'<img[^>]+?src=["|\'](?P<img_url>[^\s]+?)["|\'].*?>){1}(?:\s*</a>)?#is', $data, $images))
+		{
+			foreach($images as $key => $value)
+			{
+				if(!isset($images['img_url'][$key]) || !$images['img_url'][$key]) continue;
+				if(stripos($images['img_url'][$key], 'wp-content/uploads') === false) continue;
+
+				$tmp = parse_url($images['img_url'][$key]);
+				if($tmp === false || !isset($tmp['host']) || !$tmp['host']) continue;
+
+				$new_value = str_replace($tmp['host'], $this->cfg['url_rewrite'], $value);
+				$data = str_replace($value, $new_value, $data);
+			}
+		}
+    return $data;
 	}
 }
 
