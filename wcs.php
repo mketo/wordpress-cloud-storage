@@ -45,9 +45,10 @@ class wordpress_cloud_storage_plugin
 		{
 			$this->cfg[$key] = defined('WCS_'.strtoupper($key)) ? constant('WCS_'.strtoupper($key)) : '';
 		}
-		add_action('plugins_loaded', array($this, 'url_rewrite'));
+		add_action('plugins_loaded', array($this, 'url_rewrite_html'));
 		add_filter('wp_delete_file', array($this, 'delete_attachment'), 20);
 		add_filter('wp_generate_attachment_metadata', array($this, 'upload_attachment'), 20, 2);
+		add_filter('wp_prepare_attachment_for_js', array($this, 'url_rewrite_ajax'), 10, 5);
 		add_filter('wp_update_attachment_metadata', array($this, 'upload_attachment'), 10, 5);
 	}
 
@@ -334,25 +335,60 @@ class wordpress_cloud_storage_plugin
 	}
 
 	/**
-	 * Rewrite url
+	 * Rewrite url for ajax output
+	 *
+	 * @param array $data array with ajax data
 	 *
 	 * @return bool False or true
 	 */
-	public function url_rewrite()
+	public function url_rewrite_ajax($data)
 	{
 		if(!isset($this->cfg['url_rewrite']) || !$this->cfg['url_rewrite']) return false;
-		ob_start(array($this, 'url_rewrite_buffer_callback'));
+		array_walk_recursive($data, array($this, 'url_rewrite_ajax_callback'));
+		return $data;
+	}
+
+	/**
+	 * Rewrite url for html buffer output
+	 *
+	 * @return bool False or true
+	 */
+	public function url_rewrite_html()
+	{
+		if(!isset($this->cfg['url_rewrite']) || !$this->cfg['url_rewrite']) return false;
+		ob_start(array($this, 'url_rewrite_html_callback'));
 		return true;
 	}
 
 	/**
-	 * Rewrite url buffer callback
+	 * Rewrite url ajax callback
+	 *
+	 * @param string &$value array value
+	 * @param string $key array key
+	 *
+	 * @return bool False or true
+	 *
+	 */
+	public function url_rewrite_ajax_callback(&$value, $key)
+	{
+		if(stripos($value, 'wp-content/uploads') !== false)
+		{
+			$tmp = parse_url($value);
+			if($tmp !== false && isset($tmp['host']) && $tmp['host'])
+			{
+				$value = str_replace($tmp['host'], $this->cfg['url_rewrite'], $value);
+			}
+		}
+	}
+
+	/**
+	 * Rewrite url html buffer callback
 	 *
 	 * @param string $data Buffer data
 	 *
 	 * @return bool False or true
 	 */
-	public function url_rewrite_buffer_callback($data)
+	public function url_rewrite_html_callback($data)
 	{
 		$images = array();
 		if(preg_match_all('#(?:<a[^>]+?href=["|\'](?P<link_url>[^\s]+?)["|\'][^>]*?>\s*)?(?P<img_tag>'.
@@ -370,7 +406,7 @@ class wordpress_cloud_storage_plugin
 				$data = str_replace($value, $new_value, $data);
 			}
 		}
-		return $data;
+    return $data;
 	}
 }
 
