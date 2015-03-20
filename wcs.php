@@ -361,52 +361,48 @@ class wordpress_cloud_storage_plugin
 	}
 
 	/**
+	 * Rewrite urls
+	 *
+	 * @param string $data data to rewrite
+	 *
+	 * @return bool False or true
+	 */
+	private function url_rewrite($data)
+	{
+		if(!$upload_dir = wp_upload_dir()) return $data;
+		$tmp = parse_url($upload_dir['baseurl']);
+		if($tmp === false || !isset($tmp['scheme']) || !$tmp['scheme']) return $data;
+		$new_upload_dir = $tmp['scheme'].'://'.$this->cfg['url_rewrite'].$tmp['path'];
+		$data = str_replace($upload_dir['baseurl'], $new_upload_dir, $data);
+		if(get_option('siteurl'))
+		{
+			$mapping_upload_dir = get_option('siteurl').$tmp['path'];
+			$data = str_replace($mapping_upload_dir, $new_upload_dir, $data);
+		}
+		return $data;
+	}
+
+	/**
 	 * Rewrite url ajax callback
 	 *
 	 * @param string &$value array value
 	 * @param string $key array key
-	 *
-	 * @return bool False or true
-	 *
 	 */
 	public function url_rewrite_ajax_callback(&$value, $key)
 	{
-		if(stripos($value, 'wp-content/uploads') !== false)
-		{
-			$tmp = parse_url($value);
-			if($tmp !== false && isset($tmp['host']) && $tmp['host'])
-			{
-				$value = str_replace($tmp['host'], $this->cfg['url_rewrite'], $value);
-			}
-		}
+		$value = $this->url_rewrite($value);
 	}
 
 	/**
 	 * Rewrite url html buffer callback
 	 *
-	 * @param string $data Buffer data
+	 * @param string $data buffer data
 	 *
 	 * @return bool False or true
 	 */
 	public function url_rewrite_html_callback($data)
 	{
-		$images = array();
-		if(preg_match_all('#(?:<a[^>]+?href=["|\'](?P<link_url>[^\s]+?)["|\'][^>]*?>\s*)?(?P<img_tag>'.
-		'<img[^>]+?src=["|\'](?P<img_url>[^\s]+?)["|\'].*?>){1}(?:\s*</a>)?#is', $data, $images))
-		{
-			foreach($images[0] as $key => $value)
-			{
-				if(!isset($images['img_url'][$key]) || !$images['img_url'][$key]) continue;
-				if(stripos($images['img_url'][$key], 'wp-content/uploads') === false) continue;
-
-				$tmp = parse_url($images['img_url'][$key]);
-				if($tmp === false || !isset($tmp['host']) || !$tmp['host']) continue;
-
-				$new_value = str_replace($tmp['host'], $this->cfg['url_rewrite'], $value);
-				$data = str_replace($value, $new_value, $data);
-			}
-		}
-    return $data;
+		return $this->url_rewrite($data);
 	}
 }
 
