@@ -72,7 +72,15 @@ class wordpress_cloud_storage_plugin
 			case 'google':
 				$bucket = $this->service['storage']->bucket($this->cfg['bucket']);
 				$object = $bucket->object($delete);
-				$object->delete();
+
+				try
+				{
+					$object->delete();
+				}
+				catch(Exception $e)
+				{
+					error_log('Error removing files from Google: '.$e->getMessage());
+				}
 				break;
 			case 's3':
 				try
@@ -250,12 +258,19 @@ class wordpress_cloud_storage_plugin
 		foreach($data as $file)
 		{
 			$bucket = $this->service['storage']->bucket($this->cfg['bucket']);
-			$bucket->upload(fopen($file['from'], 'r'),
-			[
-				'name' => $file['to'],
-				'predefinedAcl' => 'publicRead',
-				'resumable' => true
-			]);
+			try
+			{
+				$bucket->upload(fopen($file['from'], 'r'),
+				[
+					'name' => $file['to'],
+					'predefinedAcl' => 'publicRead',
+					'resumable' => true
+				]);
+			}
+			catch(Exception $e)
+			{
+				error_log('Error uploading '.$file['from'].' to Google: '.$e->getMessage());
+			}
 		}
 		return true;
 	}
