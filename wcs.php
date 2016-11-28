@@ -4,7 +4,7 @@
  * Plugin Name: Wordpress Cloud Storage
  * Description: Simple plugin for wordpress to upload/delete
  * media from Amazon S3 or Google Cloud Storage.
- * Version: 0.4
+ * Version: 0.5
  * Author: Mikael Keto
  * Author URI: http://ketos.se
  * License: GPLv2
@@ -27,10 +27,11 @@
 	Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-require(dirname(__FILE__).'/autoload.php');
+require(dirname(__FILE__).'/vendor/autoload.php');
 
 use Aws\S3\S3Client;
 use Aws\S3\Exception\S3Exception;
+use Google\Cloud\Storage\StorageClient;
 
 class wordpress_cloud_storage_plugin
 {
@@ -69,14 +70,9 @@ class wordpress_cloud_storage_plugin
 		switch($this->cfg['service'])
 		{
 			case 'google':
-				try
-				{
-					$this->service['storage']->objects->delete($this->cfg['bucket'], $delete);
-				}
-				catch(Exception $e)
-				{
-					error_log('Error removing files from Google: '.$e->getMessage());
-				}
+				$bucket = $this->service['storage']->bucket($this->cfg['bucket']);
+				$object = $bucket->object($delete);
+				$object->delete();
 				break;
 			case 's3':
 				try
@@ -171,22 +167,14 @@ class wordpress_cloud_storage_plugin
 		switch($this->cfg['service'])
 		{
 			case 'google':
-				$credentials = $this->cfg['secret'];
-				if(substr($credentials, 0, 7) == 'file://')
+				$options = null;
+				if(stripos($this->cfg['secret'], '.json') !== false)
 				{
-					$credentials = file_get_contents($this->cfg['secret']);
+					$options['keyFilePath'] = $this->cfg['secret'];
 				}
-
-				$options = new Google_Auth_AssertionCredentials
-				(
-					$this->cfg['email'],
-					array('https://www.googleapis.com/auth/devstorage.full_control'),
-					$credentials
-				);
-				$this->service['client'] = new Google_Client();
-				$this->service['client']->setAssertionCredentials($options);
-				$this->service['client']->setApplicationName($this->cfg['name']);
-				$this->service['storage'] = new Google_Service_Storage($this->service['client']);
+				else $options['keyFile'] = $this->cfg['secret'];
+				$options['projectId'] = $this->cfg['name'];
+				$this->service['storage'] = new StorageClient($options);
 				break;
 			case 's3':
 				$options = null;
@@ -259,43 +247,15 @@ class wordpress_cloud_storage_plugin
 	private function upload_attachment_to_google($data)
 	{
 		if(!$data) return false;
-		$chunk_size = 1 * 1024 * 1024;
-
 		foreach($data as $file)
 		{
-			$file_type = wp_check_filetype($file['from'], wp_get_mime_types());
-
-			$object = new Google_Service_Storage_StorageObject();
-			$object->setName($file['to']);
-
-			$this->service['client']->setDefer(true);
-			$request = $this->service['storage']->objects->insert($this->cfg['bucket'], $object);
-
-			$media = new Google_Http_MediaFileUpload
-			(
-				$this->service['client'],
-				$request,
-				(isset($file_type['type']) ? $file_type['type'] : 'text/plain'),
-				null,
-				true,
-				$chunk_size
-			);
-			$media->setFileSize(filesize($file['from']));
-
-			$status = false;
-			$handle = fopen($file['from'], 'rb');
-			while(!$status && !feof($handle))
-			{
-				$chunk = fread($handle, $chunk_size);
-				$status = $media->nextChunk($chunk);
-			}
-			fclose($handle);
-			$this->service['client']->setDefer(false);
-
-			$acl = new Google_Service_Storage_ObjectAccessControl();
-			$acl->setEntity('allUsers');
-			$acl->setRole('READER');
-			$this->service['storage']->objectAccessControls->insert($this->cfg['bucket'], $file['to'], $acl);
+			$bucket = $this->service['storage']->bucket($this->cfg['bucket']);
+			$bucket->upload(fopen($file['from'], 'r'),
+			[
+				'name' => $file['to'],
+				'predefinedAcl' => 'publicRead',
+				'resumable' => true
+			]);
 		}
 		return true;
 	}

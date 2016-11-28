@@ -1,0 +1,18 @@
+{
+  "author": "Mikael Keto",
+  "description": "Allows you to mirror your media with Amazon S3 or Google Cloud Storage.",
+  "name": "TryggaBud",
+  "type": "wordpress-plugin",
+  "version": "0.5",
+  "dependencies": {
+    "php": ">=5.4"
+  },
+  "devDependencies": {
+    "php": ">=5.4",
+    "lab": "^11.1.0"
+  },
+  "require": {
+    "google/cloud": "^0.13.0",
+    "aws/aws-sdk-php": "^3.19"
+  }
+}
